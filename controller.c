@@ -11,7 +11,7 @@
 #include "queue.h"
 #include "worker.h"
 
-#include <mysql/mysql.h>
+#include <mysql.h>
 #include <openssl/evp.h>
 
 #include <unistd.h>

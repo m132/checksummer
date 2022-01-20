@@ -3,7 +3,7 @@
 
 #include "collector.h"
 
-#include <mysql/mysql.h>
+#include <mysql.h>
 #include <openssl/evp.h>
 
 #include <errno.h>
