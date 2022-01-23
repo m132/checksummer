@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 
 enum {
 	QUEUE_SPARE,
@@ -49,6 +50,49 @@ static int usage(char *name, int ret)
 		"    -q QUERY        MySQL query to use\n"
 		"    -u USER         MySQL user name\n"
 		"    -p              ask for MySQL user password\n");
+	return ret;
+}
+
+static char* _getpass(void)
+{
+	struct termios tp;
+	tcflag_t saved_lflag = 0;
+	ssize_t len;
+	size_t buf_size;
+	char *ret = NULL;
+
+	/* disable echo */
+	if (tcgetattr(STDIN_FILENO, &tp) == 0 && tp.c_lflag & ECHO)
+	{
+		saved_lflag = tp.c_lflag;
+		tp.c_lflag &= ~ECHO;
+		tcsetattr(STDIN_FILENO, TCSAFLUSH, &tp);
+	}
+	
+	if (isatty(STDIN_FILENO))
+		fprintf(stderr, "Enter password: ");
+
+	len = getline(&ret, &buf_size, stdin);
+
+	/* restore echo */
+	if (saved_lflag & ECHO)
+	{
+		tp.c_lflag = saved_lflag;
+		tcsetattr(STDIN_FILENO, TCSANOW, &tp);
+	}
+	
+	if (isatty(STDIN_FILENO)) 
+		fputs("\n", stderr);
+
+	if (len == -1)
+	{
+		free(ret);
+		return NULL;
+	}
+
+	if (len > 0 && ret[len - 1] == '\n')
+		ret[len - 1] = '\0';
+
 	return ret;
 }
 
@@ -118,7 +162,7 @@ int main(int argc, char *argv[])
 				con_info.query = optarg;
 				break;
 			case 'p':
-				/* TODO */
+				con_info.passwd = (char *) -1;
 				break;
 			default:
 				return usage(argv[0], EXIT_FAILURE);
@@ -142,6 +186,9 @@ int main(int argc, char *argv[])
 
 	ret = mysql_library_init(argc, argv, NULL);
 	ERR(ret, ret, cleanup, "Failed to initialize MySQL client library: %d", ret)
+
+	if (con_info.passwd)
+		con_info.passwd = con_info.host ? _getpass() : NULL;
 
 	/* construct shared data */
 	for (s = 0; s < sizeof (q) / sizeof (Queue*); ++s) {
@@ -287,6 +334,8 @@ cleanup_queue:
 
 	mysql_library_end();
 
+	if (con_info.passwd)
+		free(con_info.passwd);
 cleanup:
 	return ret;
 }
